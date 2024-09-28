@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Voice Assistant</title>
+    <style>
+        /* Basic styles for body */
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #f4f4f4;
+            margin: 0;
+            padding: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+        }
+
+        /* Container styles */
+        .container {
+            background-color: #fff;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 0 15px rgba(0, 0, 0, 0.1);
+            max-width: 600px;
+            width: 100%;
+        }
+
+        /* Header styles */
+        h1 {
+            text-align: center;
+            color: #333;
+        }
+
+        /* Button styles */
+        button {
+            display: block;
+            width: 100%;
+            padding: 15px;
+            font-size: 16px;
+            margin-top: 20px;
+            border: none;
+            background-color: #28a745;
+            color: white;
+            cursor: pointer;
+            border-radius: 5px;
+            transition: background-color 0.3s;
+        }
+
+        button:hover {
+            background-color: #218838;
+        }
+
+        button:disabled {
+            background-color: #6c757d;
+            cursor: not-allowed;
+        }
+
+        /* Response box styles */
+        #response {
+            display: none;
+            margin-top: 20px;
+            background-color: #e9ecef;
+            padding: 15px;
+            border-radius: 5px;
+            color: #495057;
+        }
+
+        #audioPlayer {
+            display: none;
+            margin-top: 20px;
+        }
+
+        /* Audio player styles */
+        audio {
+            width: 100%;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <h1>Record Audio for the Voice Assistant</h1>
+
+        <!-- Recording Controls -->
+        <button id="startRecord">Start Recording</button>
+        <button id="stopRecord" disabled>Stop Recording</button>
+
+        <!-- Display ChatGPT Response -->
+        <div id="response">
+            <h3>Assistant Response:</h3>
+            <p id="responseText"></p>
+        </div>
+
+        <!-- Audio Player -->
+        <div id="audioPlayer">
+            <h3>Listen to the Response:</h3>
+            <audio id="audio" controls></audio>
+        </div>
+    </div>
+
+    <script>
+        let mediaRecorder;
+        let audioChunks = [];
+
+        const startRecordButton = document.getElementById('startRecord');
+        const stopRecordButton = document.getElementById('stopRecord');
+        const responseDiv = document.getElementById('response');
+        const responseText = document.getElementById('responseText');
+        const audioPlayer = document.getElementById('audioPlayer');
+        const audioElement = document.getElementById('audio');
+
+        // Check if the browser supports recording audio
+        if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+            startRecordButton.addEventListener('click', startRecording);
+            stopRecordButton.addEventListener('click', stopRecording);
+        } else {
+            alert('Your browser does not support audio recording.');
+        }
+
+        // Start recording audio
+        function startRecording() {
+            navigator.mediaDevices.getUserMedia({ audio: true })
+                .then(function (stream) {
+                    mediaRecorder = new MediaRecorder(stream);
+
+                    mediaRecorder.start();
+                    startRecordButton.disabled = true;
+                    stopRecordButton.disabled = false;
+
+                    mediaRecorder.ondataavailable = function (event) {
+                        audioChunks.push(event.data);
+                    };
+                })
+                .catch(function (err) {
+                    alert('Could not start recording: ' + err);
+                });
+        }
+
+        // Stop recording and send the audio to the backend
+        function stopRecording() {
+            mediaRecorder.stop();
+            startRecordButton.disabled = false;
+            stopRecordButton.disabled = true;
+
+            mediaRecorder.onstop = function () {
+                const audioBlob = new Blob(audioChunks, { type: 'audio/wav' });
+                audioChunks = []; // Clear the chunks for the next recording
+                sendAudioToServer(audioBlob);
+            };
+        }
+
+        // Send the recorded audio to the server
+        async function sendAudioToServer(audioBlob) {
+            const formData = new FormData();
+            formData.append('audio_file', audioBlob, 'recorded_audio.wav');
+
+            try {
+                const response = await fetch('/api/convert', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                if (!response.ok) {
+                    throw new Error('Error uploading audio');
+                }
+
+                const data = await response.json();
+
+                // Display the response text and audio file
+                responseText.textContent = data.text;
+                audioElement.src = data.audio_url;
+
+                responseDiv.style.display = 'block';
+                audioPlayer.style.display = 'block';
+            } catch (error) {
+                alert('Failed to send audio: ' + error.message);
+            }
+        }
+    </script>
+
+</body>
+</html>
